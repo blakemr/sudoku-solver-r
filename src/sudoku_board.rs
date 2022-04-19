@@ -42,6 +42,7 @@ impl SudokuBoard {
             }
             print!("{:?}, ", SudokuBoard::get_sudoku_value(&cell));
         });
+        print!("\n");
     }
 
     #[allow(dead_code)]
@@ -54,62 +55,125 @@ impl SudokuBoard {
             }
             print!("{:?}, ", cell);
         });
+        print!("\n")
     }
 
     /// Returns a solved copy of the origional board
-    pub fn solve(&self) -> SudokuBoard {
-        let mut solution = self.board;
-
-        SudokuBoard { board: solution }
+    pub fn solve(&mut self) {
+        let mut counter = 0;
+        println!("solving...{:?}", counter);
+        while self.update_cells() {
+            counter += 1;
+            println!("solving...{:?}", counter);
+        }
     }
 
-    fn get_cell_row_neighbors(&self, index: usize) -> [u16; 8] {
-        let mut row = [0u16; SIZE - 1];
+    fn update_cells(&mut self) -> bool {
+        let mut board = self.board;
 
-        row.clone_from_slice(
-            &[
-                &self.board[SIZE * (index / SIZE)..index],
-                &self.board[index + 1..SIZE * ((index / SIZE) + 1)],
-            ]
-            .concat(),
-        );
+        for (i, _) in self
+            .board
+            .into_iter()
+            .enumerate()
+            .filter(|(_, c)| !c.is_power_of_two())
+        {
+            // Find naked singles - check against filled cells in row, column and box together
+            // cell ^ (filled_row | filled_col | filled_box)
+            let row = self.get_cell_row_filled_mask(i);
+            let col = self.get_cell_col_filled_mask(i);
+            let bxx = self.get_cell_box_filled_mask(i);
+
+            board[i] = 0b111_111_111 & !(row | col | bxx);
+            board[i] &= !self.get_cell_row_neighbor_mask(i);
+            board[i] &= !self.get_cell_col_neighbor_mask(i);
+            board[i] &= !self.get_cell_box_neighbor_mask(i);
+
+            // Find hidden singles - check against all cells in row, column and box individually
+            // maybe this doesn't work? Think about this.
+            // (cell ^ neighbor_row) & (cell ^ neighbor_col) & (cell ^ neighbor_box)
+        }
+
+        let change = board != self.board;
+
+        self.board = board;
+
+        change
+    }
+
+    fn get_cell_row_neighbor_mask(&self, index: usize) -> u16 {
+        let mut row: u16 = 0;
+
+        self.board
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| (i / SIZE == index / SIZE) && i != &index)
+            .for_each(|(_, c)| row |= c);
+
         row
     }
+    fn get_cell_col_neighbor_mask(&self, index: usize) -> u16 {
+        let mut col: u16 = 0;
 
-    fn get_cell_column_neighbors(&self, index: usize) -> [u16; 8] {
-        let mut col = [0u16; SIZE - 1];
-        let mut full_col = [0u16; SIZE];
-        for (i, val) in self
-            .board
+        self.board
             .into_iter()
             .enumerate()
-            .skip(index % SIZE)
-            .step_by(SIZE)
-        {
-            full_col[i / SIZE] = val
-        }
-        col.clone_from_slice(
-            &[&full_col[..index / SIZE], &full_col[((index / SIZE) + 1)..]].concat(),
-        );
+            .filter(|(i, _)| (i % SIZE == index % SIZE) && i != &index)
+            .for_each(|(_, c)| col |= c);
+
         col
     }
+    fn get_cell_box_neighbor_mask(&self, index: usize) -> u16 {
+        let mut bxx: u16 = 0;
 
-    /// 3*((i/9)/3) + (i%9)/3 gives the box number
-    fn get_cell_box_neighbors(&self, index: usize) -> [u16; 8] {
-        let box_index: usize = 3 * ((index / SIZE) / 3) + (index % SIZE) / 3;
-        let mut b = [0u16; 8];
-
-        let mut counter: usize = 0;
-        for (_, val) in self
-            .board
+        self.board
             .into_iter()
             .enumerate()
-            .filter(|(i, _)| 3 * ((i / SIZE) / 3) + (i % SIZE) / 3 == box_index && i != &index)
-        {
-            b[counter] = val;
-            counter += 1;
-        }
-        b
+            .filter(|(i, _)| {
+                3 * ((i / SIZE) / 3) + (i % SIZE) / 3
+                    == 3 * ((index / SIZE) / 3) + (index % SIZE) / 3
+                    && i != &index
+            })
+            .for_each(|(_, c)| bxx |= c);
+
+        bxx
+    }
+
+    fn get_cell_row_filled_mask(&self, index: usize) -> u16 {
+        let mut row: u16 = 0;
+
+        self.board
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| (i / SIZE == index / SIZE) && *i != index)
+            .for_each(|(_, c)| row |= SudokuBoard::get_sudoku_value(&c));
+
+        row
+    }
+    fn get_cell_col_filled_mask(&self, index: usize) -> u16 {
+        let mut col: u16 = 0;
+
+        self.board
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| (i % SIZE == index % SIZE) && *i != index)
+            .for_each(|(_, c)| col |= SudokuBoard::get_sudoku_value(&c));
+
+        col
+    }
+    fn get_cell_box_filled_mask(&self, index: usize) -> u16 {
+        let mut bxx: u16 = 0;
+
+        self.board
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                3 * ((i / SIZE) / 3) + (i % SIZE) / 3
+                    == 3 * ((index / SIZE) / 3) + (index % SIZE) / 3
+                    && i != &index
+            })
+            .for_each(|(_, c)| bxx |= SudokuBoard::get_sudoku_value(&c));
+
+        bxx
     }
 
     fn get_sudoku_value(v: &u16) -> u16 {
