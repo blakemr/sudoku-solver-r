@@ -61,7 +61,6 @@ impl SudokuBoard {
     /// Returns a solved copy of the origional board
     pub fn solve(&mut self) {
         let mut counter = 0;
-        println!("solving...{:?}", counter);
         while self.update_cells() {
             counter += 1;
             println!("solving...{:?}", counter);
@@ -84,9 +83,9 @@ impl SudokuBoard {
             let bxx = self.get_cell_box_filled_mask(i);
 
             board[i] = 0b111_111_111 & !(row | col | bxx);
-            board[i] &= !self.get_cell_row_neighbor_mask(i);
-            board[i] &= !self.get_cell_col_neighbor_mask(i);
-            board[i] &= !self.get_cell_box_neighbor_mask(i);
+            //board[i] &= !self.get_cell_row_neighbor_mask(i);
+            //board[i] &= !self.get_cell_col_neighbor_mask(i);
+            //board[i] &= !self.get_cell_box_neighbor_mask(i);
 
             // Find hidden singles - check against all cells in row, column and box individually
             // maybe this doesn't work? Think about this.
@@ -145,7 +144,7 @@ impl SudokuBoard {
             .into_iter()
             .enumerate()
             .filter(|(i, _)| (i / SIZE == index / SIZE) && *i != index)
-            .for_each(|(_, c)| row |= SudokuBoard::get_sudoku_value(&c));
+            .for_each(|(_, c)| row |= SudokuBoard::get_penned_cell_value(&c));
 
         row
     }
@@ -156,7 +155,7 @@ impl SudokuBoard {
             .into_iter()
             .enumerate()
             .filter(|(i, _)| (i % SIZE == index % SIZE) && *i != index)
-            .for_each(|(_, c)| col |= SudokuBoard::get_sudoku_value(&c));
+            .for_each(|(_, c)| col |= SudokuBoard::get_penned_cell_value(&c));
 
         col
     }
@@ -171,9 +170,17 @@ impl SudokuBoard {
                     == 3 * ((index / SIZE) / 3) + (index % SIZE) / 3
                     && i != &index
             })
-            .for_each(|(_, c)| bxx |= SudokuBoard::get_sudoku_value(&c));
+            .for_each(|(_, c)| bxx |= SudokuBoard::get_penned_cell_value(&c));
 
         bxx
+    }
+
+    fn get_penned_cell_value(v: &u16) -> u16 {
+        // Returns the value or 0, depending on if its the only sudoku value
+        match v.is_power_of_two() {
+            true => *v,
+            false => 0u16,
+        }
     }
 
     fn get_sudoku_value(v: &u16) -> u16 {
@@ -195,30 +202,38 @@ mod tests {
         71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
     ];
 
-    #[test]
-    fn get_row() {
-        let board = SudokuBoard { board: TEST_ARR };
-        let index = 7;
-        let solution: [u16; 8] = [0, 1, 2, 3, 4, 5, 6, 8];
+    const TEST_ARR_MASK: [u16; 81] = [
+        0, 1, 0, 4, 0, 16, 0, 64, 0, 0_, 2, 3, 4, 5, 6, 8, 9, 0, 0_, 0, 0, 0, 0, 0, 0, 0, 0, 0_, 0,
+        0, 0, 0, 0, 0, 0, 0, 0_, 0, 0, 0, 0, 0, 0, 0, 0, 0_, 0, 0, 0, 0, 0, 0, 0, 0, 0_, 0, 0, 0,
+        0, 0, 0, 0, 0, 0_, 0, 0, 0, 0, 0, 0, 0, 0, 0_, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
 
-        assert_eq!(board.get_cell_row_neighbors(index), solution);
+    #[test]
+    fn sudoku_values() {
+        assert_eq!(SudokuBoard::get_sudoku_value(&0), 0);
+        assert_eq!(SudokuBoard::get_sudoku_value(&1), 1);
+        assert_eq!(SudokuBoard::get_sudoku_value(&2), 2);
+        assert_eq!(SudokuBoard::get_sudoku_value(&4), 3);
+        assert_eq!(SudokuBoard::get_sudoku_value(&8), 4);
+        assert_eq!(SudokuBoard::get_sudoku_value(&16), 5);
+        assert_eq!(SudokuBoard::get_sudoku_value(&32), 6);
+        assert_eq!(SudokuBoard::get_sudoku_value(&64), 7);
+        assert_eq!(SudokuBoard::get_sudoku_value(&128), 8);
+        assert_eq!(SudokuBoard::get_sudoku_value(&256), 9);
+        assert_eq!(SudokuBoard::get_sudoku_value(&511), 0);
+        assert_eq!(SudokuBoard::get_sudoku_value(&3), 0);
+        assert_eq!(SudokuBoard::get_sudoku_value(&5), 0);
+        assert_eq!(SudokuBoard::get_sudoku_value(&10), 0);
+        assert_eq!(SudokuBoard::get_sudoku_value(&30), 0);
     }
 
     #[test]
-    fn get_col() {
-        let board = SudokuBoard { board: TEST_ARR };
-        let index = 20;
-        let solution: [u16; 8] = [2, 11, 29, 38, 47, 56, 65, 74];
+    fn filled_mask() {
+        let board = SudokuBoard {
+            board: TEST_ARR_MASK,
+        };
 
-        assert_eq!(board.get_cell_column_neighbors(index), solution);
-    }
-
-    #[test]
-    fn get_box() {
-        let board = SudokuBoard { board: TEST_ARR };
-        let index = 10;
-        let solution: [u16; 8] = [0, 1, 2, 9, 11, 18, 19, 20];
-
-        assert_eq!(board.get_cell_box_neighbors(index), solution);
+        assert_eq!(board.get_cell_row_filled_mask(50), 0b000_000_000);
+        assert_eq!(board.get_cell_row_filled_mask(0), 0b001_010_101);
     }
 }
